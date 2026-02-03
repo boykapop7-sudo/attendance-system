@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<title>نظام حضور - تجربة QR مع الاشتراكات</title>
+<title>نظام حضور QR آمن</title>
 <style>
 body{font-family:Arial;background:#f4f6f9;padding:20px;text-align:center}
 .box{background:#fff;padding:20px;border-radius:10px;max-width:400px;margin:auto;margin-bottom:20px}
@@ -13,13 +13,13 @@ button{background:#0d6efd;color:#fff;border:0;border-radius:5px;cursor:pointer}
 </head>
 <body>
 
-<!-- صفحة QR / تسجيل -->
+<!-- صفحة QR -->
 <div class="box" id="qrBox">
   <h3>امسح الباركود لتسجيل الحضور</h3>
   <canvas id="qrcode" style="margin:auto"></canvas>
 </div>
 
-<!-- صفحة التسجيل بعد المسح -->
+<!-- صفحة التسجيل -->
 <div class="box" id="attendanceBox" style="display:none">
   <h3>تسجيل حضورك</h3>
   <p>رقم اللاعب الخاص بك: <span id="playerNumber"></span></p>
@@ -34,30 +34,34 @@ button{background:#0d6efd;color:#fff;border:0;border-radius:5px;cursor:pointer}
 
 <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
 <script>
-/* توليد QR Code */
-QRCode.toCanvas(document.getElementById('qrcode'), window.location.href, { width:200 });
-
-/* توليد Device ID */
+/* توليد كود فريد للجهاز */
 let deviceId = localStorage.getItem("deviceId");
 if(!deviceId){
   deviceId = Math.random().toString(36).substring(2,10);
   localStorage.setItem("deviceId", deviceId);
 }
 
-/* بيانات الاشتراكات الوهمية للتجربة */
-let subscriptions = JSON.parse(localStorage.getItem("subscriptions") || "{}");
-// مثال: playerNumber : انتهاء الاشتراك
-// subscriptions = { "123": "2026-02-05", "456": "2026-01-31" }
-// للتجربة يمكن تحديث localStorage مباشرة في المتصفح
+/* توليد QR Code */
+let qrKey = Math.random().toString(36).substring(2,10); // كود يومي / فريد
+localStorage.setItem("qrKey", qrKey);
+QRCode.toCanvas(document.getElementById('qrcode'), window.location.href + "?key=" + qrKey, { width:200 });
 
-/* بعد المسح: عرض صفحة التسجيل مباشرة */
-document.getElementById("qrBox").style.display = "none";
-document.getElementById("attendanceBox").style.display = "block";
+/* التحقق من الكود عند فتح الصفحة */
+const urlParams = new URLSearchParams(window.location.search);
+const keyParam = urlParams.get('key');
+if(!keyParam || keyParam !== qrKey){
+  document.getElementById('qrBox').innerHTML = "<p>❌ يجب مسح QR Code لتسجيل الحضور</p>";
+  document.getElementById('attendanceBox').style.display = "none";
+} else {
+  // إخفاء صفحة QR وعرض صفحة التسجيل
+  document.getElementById("qrBox").style.display = "none";
+  document.getElementById("attendanceBox").style.display = "block";
 
-/* توليد رقم جديد للاعب لكل مسح */
-let playerNumber = Math.floor(100 + Math.random()*900); // رقم 3 خانات
-localStorage.setItem("playerNumber", playerNumber);
-document.getElementById("playerNumber").innerText = playerNumber;
+  // توليد رقم عشوائي لكل لاعب
+  let playerNumber = Math.floor(100 + Math.random()*900); 
+  localStorage.setItem("playerNumber", playerNumber);
+  document.getElementById("playerNumber").innerText = playerNumber;
+}
 
 /* تسجيل الحضور */
 function checkAttendance(){
@@ -71,21 +75,11 @@ function checkAttendance(){
   const now = today.toLocaleTimeString("ar-EG");
   const todayDate = today.toISOString().split("T")[0];
 
-  // التحقق من الاشتراك
-  let subEnd = subscriptions[playerNumber];
-  if(subEnd){
-    if(new Date(subEnd) < today){
-      msg.innerHTML="❌ الاشتراك منتهي، لا يمكنك تسجيل الحضور";
-      return;
-    }
-  } else {
-    msg.innerHTML="❌ رقم اللاعب غير مسجل في الاشتراكات";
-    return;
-  }
-
-  // منع التكرار لكل جهاز لكل يوم
   let attendance = JSON.parse(localStorage.getItem("attendance") || "{}");
   attendance[todayDate] = attendance[todayDate] || [];
+
+  // منع التكرار لكل جهاز لكل يوم
+  let playerNumber = localStorage.getItem("playerNumber");
   if(attendance[todayDate].some(a=>a.deviceId===deviceId)){
     msg.innerHTML="❌ تم تسجيل الحضور بالفعل اليوم";
     return;
